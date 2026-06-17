@@ -24,6 +24,8 @@
     --warn-text: #92400e;
     --danger-bg: #fff1f2;
     --danger-text: #9f1239;
+    --disabled: #e5e5e3;
+    --disabled-text: #aaaaaa;
     --radius: 14px;
     --radius-sm: 8px;
   }
@@ -43,6 +45,8 @@
       --warn-text: #fcd34d;
       --danger-bg: #2a0f14;
       --danger-text: #fca5a5;
+      --disabled: #2a2a2a;
+      --disabled-text: #555555;
     }
   }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -80,7 +84,11 @@
   }
   .field { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
   .field:last-child { margin-bottom: 0; }
-  .field label { font-size: 15px; color: var(--text); }
+  .field label { font-size: 15px; color: var(--text); display: flex; align-items: center; gap: 6px; }
+  .field label .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent); flex-shrink: 0;
+  }
   .field input[type=time] {
     font-size: 22px;
     font-weight: 500;
@@ -94,6 +102,35 @@
     text-align: center;
     -webkit-appearance: none;
   }
+  .field input[type=time]:disabled {
+    color: var(--disabled-text);
+    background: var(--disabled);
+    cursor: not-allowed;
+  }
+  .toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .toggle-row span { font-size: 13px; color: var(--muted); }
+  .toggle {
+    position: relative; width: 44px; height: 26px;
+  }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute; inset: 0;
+    background: var(--disabled); border-radius: 99px;
+    transition: background 0.2s;
+    cursor: pointer;
+  }
+  .toggle-slider:before {
+    content: ''; position: absolute;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: white; left: 3px; top: 3px;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .toggle input:checked + .toggle-slider { background: var(--accent); }
+  .toggle input:checked + .toggle-slider:before { transform: translateX(18px); }
   .result-hero {
     background: var(--accent-bg);
     border: 0.5px solid var(--border);
@@ -108,7 +145,7 @@
   .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
   .metric { background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius-sm); padding: 12px; }
   .metric .ml { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
-  .metric .mv { font-size: 20px; font-weight: 600; color: var(--text); }
+  .metric .mv { font-size: 18px; font-weight: 600; color: var(--text); }
   .metric.ok { background: var(--success-bg); }
   .metric.ok .mv { color: var(--success-text); }
   .metric.warn { background: var(--warn-bg); }
@@ -149,6 +186,11 @@
     padding: 16px 0 8px;
     display: none;
   }
+  .separator {
+    height: 0.5px;
+    background: var(--border);
+    margin: 10px 0;
+  }
 </style>
 </head>
 <body>
@@ -158,23 +200,47 @@
   <span>8h48 / dia</span>
 </header>
 
+<!-- Entrada -->
 <div class="card">
   <div class="card-label">Entrada</div>
   <div class="field">
-    <label>Chegada</label>
-    <input type="time" id="entrada" value="08:12" oninput="calcular()">
+    <label><span class="dot"></span>Chegada</label>
+    <input type="time" id="p1" value="08:12" oninput="calcular()">
   </div>
 </div>
 
+<!-- Intervalo 1 (almoço) — sempre visível -->
 <div class="card">
-  <div class="card-label">Almoço</div>
+  <div class="card-label">Intervalo 1 — almoço</div>
   <div class="field">
-    <label>Saída almoço</label>
-    <input type="time" id="a1" value="12:00" oninput="calcular()">
+    <label><span class="dot"></span>Saída</label>
+    <input type="time" id="p2" value="12:00" oninput="calcular()">
   </div>
   <div class="field">
-    <label>Retorno</label>
-    <input type="time" id="a2" value="13:00" oninput="calcular()">
+    <label><span class="dot"></span>Retorno</label>
+    <input type="time" id="p3" value="13:00" oninput="calcular()">
+  </div>
+</div>
+
+<!-- Intervalo 2 — opcional -->
+<div class="card">
+  <div class="toggle-row">
+    <div class="card-label" style="margin-bottom:0">Intervalo 2 — opcional</div>
+    <label class="toggle">
+      <input type="checkbox" id="toggle2" onchange="toggleIntervalo2()">
+      <span class="toggle-slider"></span>
+    </label>
+  </div>
+  <div id="intervalo2-fields" style="display:none">
+    <div class="separator"></div>
+    <div class="field" style="margin-top:10px">
+      <label><span class="dot"></span>Saída</label>
+      <input type="time" id="p4" value="" oninput="calcular()">
+    </div>
+    <div class="field">
+      <label><span class="dot"></span>Retorno</label>
+      <input type="time" id="p5" value="" oninput="calcular()">
+    </div>
   </div>
 </div>
 
@@ -187,30 +253,32 @@
     <div class="rsub" id="saida-sub">—</div>
   </div>
 
-  <div class="metrics">
+  <div class="metrics" id="metrics-grid">
     <div class="metric">
       <div class="ml">Manhã</div>
       <div class="mv" id="m-manha">—</div>
     </div>
-    <div class="metric" id="card-almoco">
-      <div class="ml">Almoço</div>
-      <div class="mv" id="m-almoco">—</div>
+    <div class="metric" id="card-i1">
+      <div class="ml">Intervalo 1</div>
+      <div class="mv" id="m-i1">—</div>
+    </div>
+    <div class="metric" id="card-i2" style="display:none">
+      <div class="ml">Intervalo 2</div>
+      <div class="mv" id="m-i2">—</div>
     </div>
     <div class="metric">
-      <div class="ml">Tarde necessária</div>
-      <div class="mv" id="m-tarde">—</div>
-    </div>
-    <div class="metric">
-      <div class="ml">Total</div>
+      <div class="ml">Total trabalhado</div>
       <div class="mv">8h48</div>
     </div>
   </div>
 
   <div class="card">
     <div class="card-label">Resumo</div>
-    <div class="detail-row"><span class="dl">Entrada</span><span class="dv" id="d-entrada">—</span></div>
-    <div class="detail-row"><span class="dl">Saída almoço</span><span class="dv" id="d-a1">—</span></div>
-    <div class="detail-row"><span class="dl">Retorno almoço</span><span class="dv" id="d-a2">—</span></div>
+    <div class="detail-row"><span class="dl">Entrada</span><span class="dv" id="d-p1">—</span></div>
+    <div class="detail-row"><span class="dl">Saída intervalo 1</span><span class="dv" id="d-p2">—</span></div>
+    <div class="detail-row"><span class="dl">Retorno intervalo 1</span><span class="dv" id="d-p3">—</span></div>
+    <div class="detail-row" id="d-row-p4" style="display:none"><span class="dl">Saída intervalo 2</span><span class="dv" id="d-p4">—</span></div>
+    <div class="detail-row" id="d-row-p5" style="display:none"><span class="dl">Retorno intervalo 2</span><span class="dv" id="d-p5">—</span></div>
     <div class="detail-row strong"><span class="dl">Saída prevista</span><span class="dv" id="d-saida">—</span></div>
   </div>
 </div>
@@ -222,57 +290,109 @@
 <script>
 const JORNADA = 8 * 60 + 48;
 
-function toMin(t) { const [h,m] = t.split(':').map(Number); return h*60+m; }
+function toMin(t) { if (!t) return null; const [h,m] = t.split(':').map(Number); return h*60+m; }
 function toHHMM(n) { return String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0'); }
 function fmt(m) {
-  if (m < 0) return '—';
+  if (m == null || m < 0) return '—';
   const h = Math.floor(m/60), min = m%60;
   return h === 0 ? min+'min' : h+'h'+(min>0?String(min).padStart(2,'0'):'');
 }
 
-function calcular() {
-  const eStr = document.getElementById('entrada').value;
-  const a1Str = document.getElementById('a1').value;
-  const a2Str = document.getElementById('a2').value;
-  if (!eStr||!a1Str||!a2Str) return;
+function toggleIntervalo2() {
+  const on = document.getElementById('toggle2').checked;
+  document.getElementById('intervalo2-fields').style.display = on ? 'block' : 'none';
+  document.getElementById('card-i2').style.display = on ? 'block' : 'none';
+  document.getElementById('d-row-p4').style.display = on ? 'flex' : 'none';
+  document.getElementById('d-row-p5').style.display = on ? 'flex' : 'none';
+  if (!on) {
+    document.getElementById('p4').value = '';
+    document.getElementById('p5').value = '';
+  }
+  calcular();
+}
 
-  const e=toMin(eStr), a1=toMin(a1Str), a2=toMin(a2Str);
+function calcular() {
+  const p1 = toMin(document.getElementById('p1').value);
+  const p2 = toMin(document.getElementById('p2').value);
+  const p3 = toMin(document.getElementById('p3').value);
+  const com2 = document.getElementById('toggle2').checked;
+  const p4 = com2 ? toMin(document.getElementById('p4').value) : null;
+  const p5 = com2 ? toMin(document.getElementById('p5').value) : null;
   const erro = document.getElementById('erro');
 
-  if (a1<=e) { erro.textContent='Saída do almoço deve ser depois da entrada.'; erro.style.display='block'; document.getElementById('resultado').style.display='none'; return; }
-  if (a2<=a1) { erro.textContent='Retorno do almoço deve ser depois da saída.'; erro.style.display='block'; document.getElementById('resultado').style.display='none'; return; }
-  erro.style.display='none';
+  if (p1==null||p2==null||p3==null) return;
+  if (p2<=p1) { mostrarErro('Saída do intervalo 1 deve ser depois da entrada.'); return; }
+  if (p3<=p2) { mostrarErro('Retorno do intervalo 1 deve ser depois da saída.'); return; }
+  if (com2) {
+    if (!p4||!p5) { mostrarErro('Preencha os dois horários do intervalo 2.'); return; }
+    if (p4<=p3) { mostrarErro('Saída do intervalo 2 deve ser depois do retorno do intervalo 1.'); return; }
+    if (p5<=p4) { mostrarErro('Retorno do intervalo 2 deve ser depois da saída.'); return; }
+  }
 
-  const manha = a1-e;
-  const almoco = a2-a1;
-  const tarde = JORNADA-manha;
-  const saida = a2+tarde;
+  erro.style.display = 'none';
+
+  const i1 = p2 - p1;
+  const i2 = com2 ? (p4 - p3) : 0;
+  const totalIntervalo = (p3 - p2) + (com2 ? (p5 - p4) : 0);
+  const trabalhado_ate_agora = com2 ? (p4 - p1 - (p3-p2)) : (p3 - p1 - (p3-p2) + (p3-p3));
+
+  // tempo trabalhado antes da última batida de retorno
+  const ref = com2 ? p5 : p3;
+  const trab_antes = com2
+    ? (p2 - p1) + (p4 - p3)
+    : (p2 - p1);
+
+  const falta = JORNADA - trab_antes;
+  const saida = ref + falta;
 
   document.getElementById('saida').textContent = toHHMM(saida);
-  document.getElementById('saida-sub').textContent = 'após '+fmt(tarde)+' de tarde';
-  document.getElementById('m-manha').textContent = fmt(manha);
-  document.getElementById('m-almoco').textContent = fmt(almoco);
-  document.getElementById('m-tarde').textContent = fmt(tarde);
-  document.getElementById('d-entrada').textContent = eStr;
-  document.getElementById('d-a1').textContent = a1Str;
-  document.getElementById('d-a2').textContent = a2Str;
-  document.getElementById('d-saida').textContent = toHHMM(saida);
+  document.getElementById('saida-sub').textContent = 'faltam ' + fmt(falta) + ' após o último retorno';
 
-  const ca = document.getElementById('card-almoco');
-  ca.className = 'metric ' + (almoco < 60 ? 'warn' : 'ok');
+  document.getElementById('m-manha').textContent = fmt(p2 - p1);
+  const ci1 = document.getElementById('card-i1');
+  const dur_i1 = p3 - p2;
+  document.getElementById('m-i1').textContent = fmt(dur_i1);
+  ci1.className = 'metric ' + (dur_i1 < 60 ? 'warn' : 'ok');
+
+  if (com2 && p4 && p5) {
+    const dur_i2 = p5 - p4;
+    document.getElementById('m-i2').textContent = fmt(dur_i2);
+    const ci2 = document.getElementById('card-i2');
+    ci2.className = 'metric ' + (dur_i2 < 15 ? 'warn' : 'ok');
+  }
+
+  document.getElementById('d-p1').textContent = document.getElementById('p1').value;
+  document.getElementById('d-p2').textContent = document.getElementById('p2').value;
+  document.getElementById('d-p3').textContent = document.getElementById('p3').value;
+  if (com2 && p4 && p5) {
+    document.getElementById('d-p4').textContent = document.getElementById('p4').value;
+    document.getElementById('d-p5').textContent = document.getElementById('p5').value;
+  }
+  document.getElementById('d-saida').textContent = toHHMM(saida);
 
   document.getElementById('resultado').style.display = 'block';
 }
 
+function mostrarErro(msg) {
+  const el = document.getElementById('erro');
+  el.textContent = msg;
+  el.style.display = 'block';
+  document.getElementById('resultado').style.display = 'none';
+}
+
 function resetPadrao() {
-  document.getElementById('entrada').value='08:12';
-  document.getElementById('a1').value='12:00';
-  document.getElementById('a2').value='13:00';
+  document.getElementById('p1').value = '08:12';
+  document.getElementById('p2').value = '12:00';
+  document.getElementById('p3').value = '13:00';
+  document.getElementById('toggle2').checked = false;
+  document.getElementById('p4').value = '';
+  document.getElementById('p5').value = '';
+  toggleIntervalo2();
   calcular();
 }
 
 const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.navigator.standalone;
-if (isIOS) document.getElementById('hint-ios').style.display='block';
+if (isIOS) document.getElementById('hint-ios').style.display = 'block';
 
 calcular();
 </script>
