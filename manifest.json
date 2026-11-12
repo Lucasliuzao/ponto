@@ -1,6 +1,6 @@
 {
-  "name": "Ponto LLZ",
-  "short_name": "Ponto LLZ",
+  "name": "Ponto",
+  "short_name": "Ponto",
   "description": "Calculadora de horario de saida com base na jornada de 8h48/dia.",
   "start_url": "./index.html",
   "scope": "./",
