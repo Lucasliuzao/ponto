@@ -7,6 +7,10 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Ponto LLZ">
 <meta name="theme-color" content="#ffffff">
+<meta name="description" content="Calculadora de horario de saida com base na jornada de 8h48/dia.">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <title>Ponto LLZ</title>
 <style>
   :root {
@@ -191,14 +195,61 @@
     background: var(--border);
     margin: 10px 0;
   }
+  .presets {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+  .preset-btn {
+    flex: 1;
+    min-width: 56px;
+    padding: 8px 6px;
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .preset-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .lembrete-status {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .lembrete-note {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 8px;
+  }
 </style>
 </head>
 <body>
 
 <header>
   <h1>⏱ Ponto LLZ</h1>
-  <span>8h48 / dia</span>
+  <span id="jornada-badge">8h48 / dia</span>
 </header>
+
+<!-- Jornada diária -->
+<div class="card">
+  <div class="card-label">Jornada diária</div>
+  <div class="field">
+    <label><span class="dot"></span>Carga horária</label>
+    <input type="time" id="jornada" value="08:48" oninput="calcular()">
+  </div>
+  <div class="presets">
+    <button type="button" class="preset-btn" data-val="08:00" onclick="setJornada('08:00')">8h</button>
+    <button type="button" class="preset-btn" data-val="08:24" onclick="setJornada('08:24')">8h24</button>
+    <button type="button" class="preset-btn" data-val="08:48" onclick="setJornada('08:48')">8h48</button>
+    <button type="button" class="preset-btn" data-val="09:00" onclick="setJornada('09:00')">9h</button>
+  </div>
+</div>
 
 <!-- Entrada -->
 <div class="card">
@@ -244,6 +295,21 @@
   </div>
 </div>
 
+<!-- Lembrete de saída -->
+<div class="card">
+  <div class="toggle-row">
+    <div class="card-label" style="margin-bottom:0">Lembrete de saída</div>
+    <label class="toggle">
+      <input type="checkbox" id="lembrete" onchange="toggleLembrete()">
+      <span class="toggle-slider"></span>
+    </label>
+  </div>
+  <div id="lembrete-status" class="lembrete-status">Ative para ser avisado quando chegar a hora de sair.</div>
+  <button type="button" id="lembrete-permissao-btn" class="reset-btn" style="display:none; margin-top:10px" onclick="pedirPermissaoNotificacao()">🔔 Permitir notificações</button>
+  <button type="button" id="lembrete-teste-btn" class="reset-btn" style="display:none; margin-top:10px" onclick="testarLembrete()">🔊 Testar som e notificação</button>
+  <div class="lembrete-note">Funciona enquanto este navegador (ou o app instalado) ficar aberto — sem servidor, não há aviso se tudo estiver fechado.</div>
+</div>
+
 <div id="erro" class="error"></div>
 
 <div id="resultado" style="display:none">
@@ -268,7 +334,7 @@
     </div>
     <div class="metric">
       <div class="ml">Total trabalhado</div>
-      <div class="mv">8h48</div>
+      <div class="mv" id="m-total">8h48</div>
     </div>
   </div>
 
@@ -288,7 +354,7 @@
 <button class="reset-btn" onclick="resetPadrao()">↺ Restaurar horário padrão</button>
 
 <script>
-const JORNADA = 8 * 60 + 48;
+const JORNADA_PADRAO = '08:48';
 
 function toMin(t) { if (!t) return null; const [h,m] = t.split(':').map(Number); return h*60+m; }
 function toHHMM(n) { return String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0'); }
@@ -296,6 +362,192 @@ function fmt(m) {
   if (m == null || m < 0) return '—';
   const h = Math.floor(m/60), min = m%60;
   return h === 0 ? min+'min' : h+'h'+(min>0?String(min).padStart(2,'0'):'');
+}
+
+const STORAGE_KEY = 'pontoLLZ.estado';
+
+function salvarEstado() {
+  try {
+    const estado = {
+      p1: document.getElementById('p1').value,
+      p2: document.getElementById('p2').value,
+      p3: document.getElementById('p3').value,
+      p4: document.getElementById('p4').value,
+      p5: document.getElementById('p5').value,
+      toggle2: document.getElementById('toggle2').checked,
+      jornada: document.getElementById('jornada').value,
+      lembrete: document.getElementById('lembrete').checked
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
+  } catch (e) { /* localStorage indisponível (ex.: modo privado) */ }
+}
+
+function carregarEstado() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const estado = JSON.parse(raw);
+    document.getElementById('p1').value = estado.p1 || '08:12';
+    document.getElementById('p2').value = estado.p2 || '12:00';
+    document.getElementById('p3').value = estado.p3 || '13:00';
+    document.getElementById('p4').value = estado.p4 || '';
+    document.getElementById('p5').value = estado.p5 || '';
+    document.getElementById('toggle2').checked = !!estado.toggle2;
+    document.getElementById('jornada').value = estado.jornada || JORNADA_PADRAO;
+    document.getElementById('lembrete').checked = !!estado.lembrete;
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function setJornada(val) {
+  document.getElementById('jornada').value = val;
+  calcular();
+}
+
+function atualizarPresetsAtivos(valorAtual) {
+  document.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.val === valorAtual);
+  });
+}
+
+let lembreteTimeoutId = null;
+let audioCtx = null;
+
+function suportaNotificacao() {
+  return 'Notification' in window;
+}
+
+function garantirAudioContext() {
+  if (!audioCtx) {
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { audioCtx = null; }
+  }
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(() => {});
+  }
+}
+
+function tocarSom() {
+  if (!audioCtx) return;
+  try {
+    const inicio = audioCtx.currentTime;
+    [0, 0.2, 0.4].forEach((atraso, i) => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = i < 2 ? 880 : 1046.5;
+      const t = inicio + atraso;
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.4, t + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(t);
+      osc.stop(t + 0.18);
+    });
+  } catch (e) { /* ignora */ }
+}
+
+function mostrarStatusLembrete(msg) {
+  document.getElementById('lembrete-status').textContent = msg;
+}
+
+function cancelarLembrete() {
+  if (lembreteTimeoutId) {
+    clearTimeout(lembreteTimeoutId);
+    lembreteTimeoutId = null;
+  }
+}
+
+function atualizarUiLembrete() {
+  const on = document.getElementById('lembrete').checked;
+  const btn = document.getElementById('lembrete-permissao-btn');
+  const testeBtn = document.getElementById('lembrete-teste-btn');
+
+  if (!suportaNotificacao()) {
+    btn.style.display = 'none';
+    testeBtn.style.display = 'none';
+    if (on) mostrarStatusLembrete('Seu navegador não tem suporte a notificações.');
+    return;
+  }
+  if (!on) {
+    btn.style.display = 'none';
+    testeBtn.style.display = 'none';
+    mostrarStatusLembrete('Ative para ser avisado quando chegar a hora de sair.');
+    return;
+  }
+  if (Notification.permission === 'granted') {
+    btn.style.display = 'none';
+    testeBtn.style.display = 'block';
+  } else if (Notification.permission === 'denied') {
+    btn.style.display = 'none';
+    testeBtn.style.display = 'none';
+    mostrarStatusLembrete('Notificações bloqueadas no navegador. Habilite nas configurações do site para usar o lembrete.');
+  } else {
+    btn.style.display = 'block';
+    testeBtn.style.display = 'none';
+    mostrarStatusLembrete('Permita as notificações para ativar o lembrete.');
+  }
+}
+
+function toggleLembrete() {
+  if (document.getElementById('lembrete').checked) garantirAudioContext();
+  salvarEstado();
+  atualizarUiLembrete();
+  calcular();
+}
+
+function pedirPermissaoNotificacao() {
+  garantirAudioContext();
+  Notification.requestPermission().then(perm => {
+    atualizarUiLembrete();
+    if (perm === 'granted') {
+      tocarSom();
+      try { new Notification('Lembrete ativado ✅', { body: 'Vamos te avisar (com som) na hora de bater a saída.' }); } catch (e) { /* ignora */ }
+    }
+    calcular();
+  });
+}
+
+function testarLembrete() {
+  garantirAudioContext();
+  tocarSom();
+  try {
+    new Notification('⏱ Teste do lembrete', {
+      body: 'É assim que o aviso (com som) vai aparecer na hora de sair.',
+      tag: 'ponto-llz-teste'
+    });
+  } catch (e) { /* ignora */ }
+}
+
+function agendarLembrete(saidaMin) {
+  cancelarLembrete();
+  const ligado = document.getElementById('lembrete').checked;
+  if (!ligado || !suportaNotificacao() || Notification.permission !== 'granted') return;
+
+  const agora = new Date();
+  const alvo = new Date();
+  alvo.setHours(Math.floor(saidaMin / 60), saidaMin % 60, 0, 0);
+
+  const diffMs = alvo.getTime() - agora.getTime();
+  if (diffMs <= 0) {
+    mostrarStatusLembrete('O horário de saída de hoje (' + toHHMM(saidaMin) + ') já passou.');
+    return;
+  }
+
+  lembreteTimeoutId = setTimeout(() => {
+    tocarSom();
+    try {
+      new Notification('⏱ Hora de bater o ponto!', {
+        body: 'Já são ' + toHHMM(saidaMin) + '. Não esqueça de registrar a saída.',
+        tag: 'ponto-llz-lembrete'
+      });
+    } catch (e) { /* ignora */ }
+  }, diffMs);
+
+  const faltamMin = Math.max(1, Math.round(diffMs / 60000));
+  mostrarStatusLembrete('Lembrete agendado para ' + toHHMM(saidaMin) + ' (em ' + fmt(faltamMin) + '). Mantenha esta aba aberta.');
 }
 
 function toggleIntervalo2() {
@@ -312,6 +564,8 @@ function toggleIntervalo2() {
 }
 
 function calcular() {
+  const jornadaInput = document.getElementById('jornada').value;
+  const JORNADA = toMin(jornadaInput);
   const p1 = toMin(document.getElementById('p1').value);
   const p2 = toMin(document.getElementById('p2').value);
   const p3 = toMin(document.getElementById('p3').value);
@@ -320,21 +574,23 @@ function calcular() {
   const p5 = com2 ? toMin(document.getElementById('p5').value) : null;
   const erro = document.getElementById('erro');
 
-  if (p1==null||p2==null||p3==null) return;
+  atualizarPresetsAtivos(jornadaInput);
+
+  if (JORNADA == null || JORNADA <= 0) { mostrarErro('Informe uma carga horária diária válida.'); return; }
+  document.getElementById('jornada-badge').textContent = fmt(JORNADA) + ' / dia';
+  document.getElementById('m-total').textContent = fmt(JORNADA);
+
+  if (p1==null||p2==null||p3==null) { cancelarLembrete(); return; }
   if (p2<=p1) { mostrarErro('Saída do intervalo 1 deve ser depois da entrada.'); return; }
   if (p3<=p2) { mostrarErro('Retorno do intervalo 1 deve ser depois da saída.'); return; }
   if (com2) {
-    if (!p4||!p5) { mostrarErro('Preencha os dois horários do intervalo 2.'); return; }
+    if (p4==null||p5==null) { mostrarErro('Preencha os dois horários do intervalo 2.'); return; }
     if (p4<=p3) { mostrarErro('Saída do intervalo 2 deve ser depois do retorno do intervalo 1.'); return; }
     if (p5<=p4) { mostrarErro('Retorno do intervalo 2 deve ser depois da saída.'); return; }
   }
 
   erro.style.display = 'none';
-
-  const i1 = p2 - p1;
-  const i2 = com2 ? (p4 - p3) : 0;
-  const totalIntervalo = (p3 - p2) + (com2 ? (p5 - p4) : 0);
-  const trabalhado_ate_agora = com2 ? (p4 - p1 - (p3-p2)) : (p3 - p1 - (p3-p2) + (p3-p3));
+  salvarEstado();
 
   // tempo trabalhado antes da última batida de retorno
   const ref = com2 ? p5 : p3;
@@ -343,10 +599,16 @@ function calcular() {
     : (p2 - p1);
 
   const falta = JORNADA - trab_antes;
-  const saida = ref + falta;
+  const saida = Math.max(ref, ref + falta);
 
   document.getElementById('saida').textContent = toHHMM(saida);
-  document.getElementById('saida-sub').textContent = 'faltam ' + fmt(falta) + ' após o último retorno';
+  if (falta > 0) {
+    document.getElementById('saida-sub').textContent = 'faltam ' + fmt(falta) + ' após o último retorno';
+  } else {
+    document.getElementById('saida-sub').textContent = falta === 0
+      ? 'jornada cumprida no último retorno'
+      : fmt(-falta) + ' de hora extra até o último retorno';
+  }
 
   document.getElementById('m-manha').textContent = fmt(p2 - p1);
   const ci1 = document.getElementById('card-i1');
@@ -354,7 +616,7 @@ function calcular() {
   document.getElementById('m-i1').textContent = fmt(dur_i1);
   ci1.className = 'metric ' + (dur_i1 < 60 ? 'warn' : 'ok');
 
-  if (com2 && p4 && p5) {
+  if (com2 && p4!=null && p5!=null) {
     const dur_i2 = p5 - p4;
     document.getElementById('m-i2').textContent = fmt(dur_i2);
     const ci2 = document.getElementById('card-i2');
@@ -364,16 +626,23 @@ function calcular() {
   document.getElementById('d-p1').textContent = document.getElementById('p1').value;
   document.getElementById('d-p2').textContent = document.getElementById('p2').value;
   document.getElementById('d-p3').textContent = document.getElementById('p3').value;
-  if (com2 && p4 && p5) {
+  if (com2 && p4!=null && p5!=null) {
     document.getElementById('d-p4').textContent = document.getElementById('p4').value;
     document.getElementById('d-p5').textContent = document.getElementById('p5').value;
   }
   document.getElementById('d-saida').textContent = toHHMM(saida);
 
   document.getElementById('resultado').style.display = 'block';
+
+  if (falta > 0) {
+    agendarLembrete(saida);
+  } else {
+    cancelarLembrete();
+  }
 }
 
 function mostrarErro(msg) {
+  cancelarLembrete();
   const el = document.getElementById('erro');
   el.textContent = msg;
   el.style.display = 'block';
@@ -381,12 +650,17 @@ function mostrarErro(msg) {
 }
 
 function resetPadrao() {
+  try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignora */ }
   document.getElementById('p1').value = '08:12';
   document.getElementById('p2').value = '12:00';
   document.getElementById('p3').value = '13:00';
   document.getElementById('toggle2').checked = false;
   document.getElementById('p4').value = '';
   document.getElementById('p5').value = '';
+  document.getElementById('jornada').value = JORNADA_PADRAO;
+  document.getElementById('lembrete').checked = false;
+  cancelarLembrete();
+  atualizarUiLembrete();
   toggleIntervalo2();
   calcular();
 }
@@ -394,7 +668,15 @@ function resetPadrao() {
 const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.navigator.standalone;
 if (isIOS) document.getElementById('hint-ios').style.display = 'block';
 
+const estadoCarregado = carregarEstado();
+const on2 = document.getElementById('toggle2').checked;
+document.getElementById('intervalo2-fields').style.display = on2 ? 'block' : 'none';
+document.getElementById('card-i2').style.display = on2 ? 'block' : 'none';
+document.getElementById('d-row-p4').style.display = on2 ? 'flex' : 'none';
+document.getElementById('d-row-p5').style.display = on2 ? 'flex' : 'none';
+atualizarUiLembrete();
 calcular();
+if (!estadoCarregado) salvarEstado();
 </script>
 </body>
 </html>
